@@ -1,0 +1,5 @@
+#!/usr/bin/env python
+
+import midi_to_spc_template
+
+print("Script called successfully")
