@@ -1,3 +1,3 @@
 import mido
 
-from .version import version
+from .midi_file import MidiFile
