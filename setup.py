@@ -16,6 +16,8 @@ setup(name='midi_to_spc_template',
       scripts=['bin/midi-to-spc-template'],
       install_requires=[
           'mido',
-          'pandas'
+          'numpy',
+          'pandas',
+          'tqdm'
       ],
       zip_safe=False)
