@@ -19,7 +19,7 @@ class MidiFile(mido.MidiFile):
     
         _df = pd.DataFrame()
         
-        for i, track in tqdm(enumerate(self.tracks)):
+        for i, track in enumerate(self.tracks):
             
             _dict = {}
             
@@ -91,5 +91,102 @@ class MidiFile(mido.MidiFile):
 
         return _df
 
-    def to_addmusick_txt(self):
-        raise NotImplementedError
+    def to_addmusick(self, author="", title="", game="", length="auto", comment=""):
+        df_tracks = self.to_pandas()
+        
+        bpm = 180 # TODO: change to use the tempo form midi file
+        seconds_per_beat = 60 / bpm
+        smw_time = int(round(bpm * 256 / 625, 0)) # smw time formula: t = BPM * 256 / 625
+
+        # helper function to 
+        def get_smw_note_duration(duration, quarter_duration):
+            """
+            param duration: duration of the note you want to get the smw duration notation for
+            param quarter_duration: duration of a quarter note in your unit system
+            
+            >>> get_smw_note_duration(6, 4)
+            >>> 4. # returns a dotted quarter since 6 is 1.5 times as long as 4 (no matter what th eunits are)
+            """
+            
+            ratio_map = {8: "1^1", 6: "1.", 4: "1", 3: "2.", 2: "2", 1.5: "4.", 1: "4", .75: "8.", .5: "8",
+                         .375: "16.", .25: "16", .125: "32",
+                        .0625: "64", .0317: "128"}  # TODO: Add more granularity
+
+            ratio = duration / quarter_duration
+
+            closest_ratio = min(ratio_map, key=lambda x: abs(x - ratio))
+
+            return ratio_map[closest_ratio]
+        
+
+        def smw_note_name(note_name):
+            smw_note = "o" + note_name[-1] + note_name[0].lower()
+            if note_name[1] == "#":
+                smw_note += "+"
+
+            return smw_note
+        
+        df_tracks = df_tracks[df_tracks["type_1"] == "note_on"][
+            ["track", "channel", "note", "note_name", "time", "total_time","total_time_seconds",
+             "duration", "duration_seconds"]].sort_values(by=["track", "channel", "total_time"])
+        
+        df_tracks["end_total_seconds"] = df_tracks["total_time_seconds"] + df_tracks["duration_seconds"]
+        df_tracks["smw_note_name"] = df_tracks["note_name"].apply(smw_note_name)
+        df_tracks["smw_note_duration"] = df_tracks["duration_seconds"].apply(
+            lambda x: get_smw_note_duration(x, seconds_per_beat))
+        
+        header = f"""
+        #amk 2
+
+        #SPC
+        {{
+            #author "{author}"
+            #title "{title}"
+            #game "{game}"
+            #length "{length}"
+            #comment "{comment}"
+        }}
+
+        """
+        
+        channel_strings = {}
+
+        # the 0th channel string has some specifics
+        channel_strings[0] = f"""
+        #0 w255 t{smw_time}
+
+        @9 ; piano
+
+        v255 
+        """
+
+        # template for adding further channels
+        add_channel_template = f"""
+        #channel_number
+
+        @9 ; piano
+
+        v255 
+        """
+        
+        for i, (track, channel) in enumerate(
+            df_tracks[["track", "channel"]].drop_duplicates().values):
+
+            channel_data = df_tracks.copy()[(df_tracks["track"] == track) & (df_tracks["channel"] == channel)][
+                ["total_time_seconds", "duration_seconds", "end_total_seconds",
+                 "smw_note_name", "smw_note_duration"]
+            ].reset_index()
+
+            channel_string = add_channel_template.replace("channel_number", str(i + 1))
+
+            channel_string += (channel_data.loc[0, "smw_note_name"] +
+                               channel_data.loc[0, "smw_note_duration"] + " ")
+
+            for ix in channel_data.index:
+                if channel_data.loc[ix, "total_time_seconds"] >= channel_data.loc[ix - 1, "end_total_seconds"]:
+                    channel_string += (channel_data.loc[ix, "smw_note_name"] +
+                               channel_data.loc[ix, "smw_note_duration"] + " ")
+
+            channel_strings[i + 1] = channel_string
+    
+        return(df_tracks, channel_strings)
