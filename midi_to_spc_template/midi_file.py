@@ -1,6 +1,8 @@
 import mido
 import numpy as np
 import pandas as pd
+import warnings
+import pprint
 
 from tqdm import tqdm
 
@@ -91,7 +93,10 @@ class MidiFile(mido.MidiFile):
 
         return _df
 
-    def to_addmusick(self, author="", title="", game="", length="auto", comment=""):
+    def to_addmusick(self, file=None, print_output=False, return_string=True, author="", title="", game="", length="auto", comment=""):
+        if file is None:
+            warnings.warn("Warning: No file path given, output will not be saved to file")
+        
         df_tracks = self.to_pandas()
         
         bpm = 180 # TODO: change to use the tempo form midi file
@@ -169,24 +174,38 @@ class MidiFile(mido.MidiFile):
         v255 
         """
         
-        for i, (track, channel) in enumerate(
-            df_tracks[["track", "channel"]].drop_duplicates().values):
+        for i, (track, channel) in enumerate(df_tracks[["track", "channel"]].drop_duplicates().values):
 
             channel_data = df_tracks.copy()[(df_tracks["track"] == track) & (df_tracks["channel"] == channel)][
                 ["total_time_seconds", "duration_seconds", "end_total_seconds",
                  "smw_note_name", "smw_note_duration"]
-            ].reset_index()
+            ].reset_index(drop=True)
 
             channel_string = add_channel_template.replace("channel_number", str(i + 1))
 
             channel_string += (channel_data.loc[0, "smw_note_name"] +
                                channel_data.loc[0, "smw_note_duration"] + " ")
-
-            for ix in channel_data.index:
+            
+            for ix in channel_data.index[1:]:
                 if channel_data.loc[ix, "total_time_seconds"] >= channel_data.loc[ix - 1, "end_total_seconds"]:
                     channel_string += (channel_data.loc[ix, "smw_note_name"] +
                                channel_data.loc[ix, "smw_note_duration"] + " ")
 
             channel_strings[i + 1] = channel_string
-    
-        return(df_tracks, channel_strings)
+        
+        amk_txt = header
+        
+        for i in channel_strings.keys():
+            amk_txt = amk_txt + "\n" + channel_strings[i]
+        
+        if not file is None:
+            with open(file, "w") as text_file:
+                print(addmusick_txt, file=text_file)
+
+        if print_output:
+            pp = pprint.PrettyPrinter()
+            pp.pprint(amk_txt)
+            
+        if return_string:
+            return(amk_txt)
+        
