@@ -3,7 +3,7 @@ midi_to_spc_template
 
 *in development, nothing working yet*
 
-You can use this package to do some for work for you when you want to create an SPC file for a Super Mario World
+You can use this package to do some work for you when you want to create an SPC file for a Super Mario World
 song port. Specifically, from an midi input file you can generate a .txt file that is compatible with AddmusicK,
 thank you very much.
 
